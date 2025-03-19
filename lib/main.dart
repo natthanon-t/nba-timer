@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:audioplayers/audioplayers.dart';
 
 void main() {
   runApp(const MyApp());
@@ -26,15 +28,18 @@ class CountdownTimer extends StatefulWidget {
 
 class _CountdownTimerState extends State<CountdownTimer> {
   static const int quarterDuration = 12 * 60;
-  static const int timeoutDuration = 60;
-  static const int halftimeDuration = 15 * 60;
-  static const int restBetweenQuarters = 2 * 60;
+  static const int timeoutDuration = 60;  // Minus 15 seconds from nba time
+  static const int halftimeDuration = 14 * 60; // Minus 1 minute from nba time
+  static const int restBetweenQuarters = 2 * 60;  // Minus 30 seconds from nba time
 
   int timeLeft = quarterDuration;
   Timer? _timer;
   bool isRunning = false;
   bool isLoading = false;
   String latestGameInfo = "Loading latest games...";
+  bool showTimerUnderScoreboard = false;
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  Timer? _beepTimer;
 
   @override
   void initState() {
@@ -82,31 +87,12 @@ class _CountdownTimerState extends State<CountdownTimer> {
     }
   }
 
-  void startPauseTimer() {
-    if (isRunning) {
-      _timer?.cancel();
-    } else {
-      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        if (timeLeft > 0) {
-          setState(() {
-            timeLeft--;
-          });
-        } else {
-          timer.cancel();
-          isRunning = false;
-        }
-      });
-    }
-    setState(() {
-      isRunning = !isRunning;
-    });
-  }
-
-  void startTimeout() {
+  void startTimer(int duration) {
     _timer?.cancel();
     setState(() {
-      timeLeft = timeoutDuration;
+      timeLeft = duration;
       isRunning = true;
+      showTimerUnderScoreboard = true;
     });
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (timeLeft > 0) {
@@ -115,52 +101,26 @@ class _CountdownTimerState extends State<CountdownTimer> {
         });
       } else {
         timer.cancel();
-        isRunning = false;
+        startBeeping();
       }
     });
   }
 
-  void startHalftime() {
-    _timer?.cancel();
-    setState(() {
-      timeLeft = halftimeDuration;
-      isRunning = true;
-    });
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (timeLeft > 0) {
-        setState(() {
-          timeLeft--;
-        });
-      } else {
-        timer.cancel();
-        isRunning = false;
-      }
+  void startBeeping() {
+    _beepTimer?.cancel();
+    _beepTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      _audioPlayer.play(AssetSource('20-seconds-game-countdown-142456.mp3'));
     });
   }
 
-  void startRestPeriod() {
+  void resetTimer() {
     _timer?.cancel();
+    _beepTimer?.cancel();
+    _audioPlayer.stop();
     setState(() {
-      timeLeft = restBetweenQuarters;
-      isRunning = true;
-    });
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (timeLeft > 0) {
-        setState(() {
-          timeLeft--;
-        });
-      } else {
-        timer.cancel();
-        isRunning = false;
-      }
-    });
-  }
-
-  void resetQuarter() {
-    _timer?.cancel();
-    setState(() {
-      timeLeft = quarterDuration;
+      timeLeft = 0;
       isRunning = false;
+      showTimerUnderScoreboard = false;
     });
   }
 
@@ -212,6 +172,23 @@ class _CountdownTimerState extends State<CountdownTimer> {
                     onPressed: isLoading ? null : fetchLatestGameScores,
                     child: const Text("Refresh"),
                   ),
+                  if (showTimerUnderScoreboard) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.red, width: 2),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        children: [
+                          Text("Timer: ${formatTime(timeLeft)}", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.red)),
+                          const SizedBox(height: 5),
+                          ElevatedButton(onPressed: resetTimer, child: const Text("Reset Timer")),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -219,15 +196,11 @@ class _CountdownTimerState extends State<CountdownTimer> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                ElevatedButton(onPressed: startPauseTimer, child: Text(isRunning ? "Pause" : "Start")),
+                ElevatedButton(onPressed: () => startTimer(timeoutDuration), child: const Text("Timeout")),
                 const SizedBox(width: 10),
-                ElevatedButton(onPressed: startTimeout, child: const Text("Timeout")),
+                ElevatedButton(onPressed: () => startTimer(halftimeDuration), child: const Text("Halftime")),
                 const SizedBox(width: 10),
-                ElevatedButton(onPressed: startHalftime, child: const Text("Halftime")),
-                const SizedBox(width: 10),
-                ElevatedButton(onPressed: startRestPeriod, child: const Text("Rest Between Quarters")),
-                const SizedBox(width: 10),
-                ElevatedButton(onPressed: resetQuarter, child: const Text("Reset")),
+                ElevatedButton(onPressed: () => startTimer(restBetweenQuarters), child: const Text("Rest Between Quarters")),
               ],
             ),
           ],
