@@ -136,6 +136,7 @@ class _CountdownTimerState extends State<CountdownTimer> {
       appBar: AppBar(
         title: const Text("NBA Countdown Timer"),
         centerTitle: true,
+        foregroundColor: Colors.white,
         backgroundColor: Colors.blue,
       ),
       body: Center(
